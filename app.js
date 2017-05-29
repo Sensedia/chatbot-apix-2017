@@ -152,11 +152,6 @@ function callWit(message, senderID) {
 function parseMessageWit(message, senderID) {
 
     message.intent.forEach(function(intent) {
-
-        console.log(">>>> Intent");
-        console.log(intent);
-        console.log(">>>> Value");
-        console.log(intent.value);
       
         switch(intent.value) {
         
