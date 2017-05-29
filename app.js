@@ -45,6 +45,10 @@ const PHONE_URL = (process.env.PHONE_URL) ?
   (process.env.PHONE_URL) :
   config.get('phoneUrl');
 
+const PAYMENT_URL = (process.env.PAYMENT_URL) ?
+  (process.env.PAYMENT_URL) :
+  config.get('paymentUrl');
+
 const API_CLIENT_ID = (process.env.API_CLIENT_ID) ?
   (process.env.API_CLIENT_ID) :
   config.get('apiClientID');
@@ -160,11 +164,19 @@ function parsePostback(postback, senderID) {
         break;
 
         case 'INFORMAR_TEL_SIM':
-          // Encaminha para pagamento
+          sendPaymentMessage(senderID);
         break;
 
         case 'INFORMAR_TEL_NAO':
           sendPhoneMessage(senderID, "Informe o telefone para cadastro.");
+        break;
+
+        case 'PAGAMENTO_CIELO':
+          generateReceiptCielo(senderID);
+        break;
+
+        case 'PAGAMENTO_VISA':
+          generateReceiptVisa(senderID);
         break;
 
         case 'NOTIFICAR_SIM':
@@ -201,6 +213,14 @@ function searchProduct(product, senderID) {
 }
 
 function sendProductMessage(recipientId, product) {
+
+  var flow = loadFlowCache(recipientId);
+  flow.productId = product.productId;
+  flow.productName = product.name;
+  flow.productInstallment = product.installment;
+  flow.productPrice = product.value;
+  
+  saveFlowCache(recipientId, flow);
 
   var messageData = {
     recipient: {
@@ -348,13 +368,197 @@ function savePhone(senderID, phoneNumber) {
 
               saveFlowCache(senderID, flow);
 
-              console.log(">> PHONE SAVE");
+              sendPaymentMessage(senderID);
               
           } else {
               console.error(body);
           }
     });
 }
+
+function sendPaymentMessage(senderID) {
+    
+    var messageData = {
+    recipient: {
+      id: senderID
+    },
+    message: {
+      attachment: {
+        type: "template",
+        payload: {
+          template_type: "button",
+          text: "Qual a forma de pagamento desejada?",
+          buttons:[{
+            type: "postback",
+            title: "Visa",
+            payload: "PAGAMENTO_VISA"
+          }, {
+            type: "postback",
+            title: "Cielo LIO",
+            payload: "PAGAMENTO_CIELO"
+          }]
+        }
+      }
+    }
+  };  
+
+  callSendAPI(messageData);
+}
+
+function generateReceiptCielo(senderID) {
+   generateReceipt(senderID, 'CIELO_LIO');
+}
+
+function generateReceiptVisa(senderID) {
+   generateReceipt(senderID, 'VISA_CHECKOUT');
+}
+
+function generateReceipt(senderID, method) {
+    
+    var flow = loadFlowCache(senderID);
+
+    var json = {};
+    json.paymentProvider = method;
+    json.amount = 3;
+    json.remoteID = senderID;
+    json.callbackUrl = SERVER_URL + '/finish?senderId=' + senderID;
+    json.item = flow.productName;
+
+    request({
+        uri: PAYMENT_URL + '/payments',
+        method: 'POST',
+        headers: {'client_id': API_CLIENT_ID},
+        json: json
+      }, function (error, response, body) {          
+
+          if (!error && response.statusCode == 201 && body) {
+              sendReceiptMessage(senderID, json.item, flow.productPrice, method, flow.productId, 
+                flow.productInstallment, flow.username);
+
+                if (method == 'VISA_CHECKOUT') {
+                  sendVisaCheckoutButtonMessage(senderID, body.paymentID);
+                }
+          
+          } else {
+              console.log('Error sending payment');
+          }
+    });
+}
+
+function sendReceiptMessage(recipientId, product, price, method, productId, productInstallment, username) {
+
+  var timestamp = Math.round(new Date() / 1000);
+  var priceFixed = price.toFixed(2);
+
+  var receiptId = "order" + Math.floor(Math.random()*1000);
+
+  var messageData = {
+    recipient: {
+      id: recipientId
+    },
+    message:{
+      attachment: {
+        type: "template",
+        payload: {
+          template_type: "receipt",
+          recipient_name: username,
+          order_number: receiptId,
+          currency: "BRL",
+          payment_method: method,        
+          timestamp: timestamp, 
+          elements: [{
+            title: product,
+            subtitle: productInstallment,
+            quantity: 1,
+            price: priceFixed,
+            currency: "BRL",
+            image_url: SERVER_URL + "/image/" + productId
+          }],
+          address: {
+            street_1: "Av. 1",
+            street_2: "",
+            city: "São Paulo",
+            postal_code: "13000-000",
+            state: "SP",
+            country: "BR"
+          },
+          summary: {
+            subtotal: priceFixed,
+            shipping_cost: 0.00,
+            total_tax: 0.00,
+            total_cost: priceFixed
+          },
+          adjustments: []
+        }
+      }
+    }
+  };
+
+  callSendAPI(messageData);
+}
+
+function sendVisaCheckoutButtonMessage(senderID, paymentID) {
+
+  var messageData = {
+    recipient: {
+      id: senderID
+    },
+    message: {
+      attachment: {
+        type: "template",
+        payload: {
+          template_type: "button",
+          text: "Clique no botão abaixo para efetuar o pagamento",
+          buttons:[{
+            type: "web_url",
+            title: "Visa Checkout",
+            url: VISA_CHECKOUT_URL + '?id=' + paymentID
+          }]
+        }
+      }
+    }
+  };  
+
+  callSendAPI(messageData);
+}
+
+function getUserName(senderID) {
+
+  request({
+    uri: 'https://graph.facebook.com/v2.9/' + senderID + '/',
+    qs: { access_token: PAGE_ACCESS_TOKEN },
+    method: 'GET'
+  }, function (error, response, body) {
+
+    if (!error && response.statusCode == 200) {
+
+        var flow = loadFlowCache(senderID);
+
+        var userProfile = JSON.parse(body);
+        flow.username = userProfile.first_name + ' ' + userProfile.last_name;
+        saveFlowCache(senderID, flow);
+        
+    } else {
+      console.error("Failed calling Graph API", response.statusCode, response.statusMessage, body.error);
+    }
+  });  
+}
+
+app.post('/finish', function (req, res) {
+
+    if(req.query.senderID) {
+      //sendSurveyMessage(payload.senderID);
+      //callGraphAPI(payload.senderID);
+      getUserName(req.query.senderID);
+      searchProduct('Iphone 6', req.query.senderID);
+      generateReceiptCielo(req.query.senderID);
+      //getPhone(payload.senderID);
+     // var flow = loadFlowCache(payload.senderID);
+      //sendSMS(payload.senderID, flow.phone);
+    }
+
+    res.sendStatus(200);
+});
 
 function sendErrorMessage(senderID, message) {
     sendTextMessage(senderID, message);
@@ -435,6 +639,7 @@ function parseMessageWit(message, senderID) {
         switch(intent.value) {
         
           case 'greetings':
+             getUserName(senderID);
              sendTextMessage(senderID, "Olá, seja bem vindo.");
              return; 
 
