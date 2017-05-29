@@ -49,6 +49,10 @@ const PAYMENT_URL = (process.env.PAYMENT_URL) ?
   (process.env.PAYMENT_URL) :
   config.get('paymentUrl');
 
+const SMS_URL = (process.env.SMS_URL) ?
+  (process.env.SMS_URL) :
+  config.get('smsUrl');
+
 const API_CLIENT_ID = (process.env.API_CLIENT_ID) ?
   (process.env.API_CLIENT_ID) :
   config.get('apiClientID');
@@ -122,6 +126,18 @@ app.get("/image/:productId", function(req, res) {
     });
 });
 
+app.get('/finish', function (req, res) {
+
+    var senderID = req.query.senderID;
+
+    if(senderID) {
+      var flow = loadFlowCache(senderID);
+      sendSMS(senderID, flow.phone, flow.username);
+    }
+
+    res.sendStatus(200);
+});
+
 function receivedMessage(event) {
   
     var senderID = event.sender.id;
@@ -135,6 +151,30 @@ function receivedMessage(event) {
 
     var messageText = message.text;
     var messageAttachments = message.attachments;
+
+    var quickReply = message.quick_reply;
+
+   if (quickReply) {
+     
+      var quickReplyPayload = quickReply.payload;
+      console.log("Resposta rápida:  Mensagem: %s | Payload:  %s", messageId, quickReplyPayload);  
+      
+      switch(quickReplyPayload) {
+        case 'BOM':
+            sendTextMessage(senderID, 'Obrigado');
+          break;
+
+          case 'MUITO_BOM':
+            sendTextMessage(senderID, 'Muito Obrigado');
+          break;
+
+          case 'EXTRAORDINARIO':
+            sendTextMessage(senderID, 'Muito Obrigado Mesmo!');
+          break;
+      }
+
+      return;
+    }
 
     if (messageText) {
       callWit(messageText, senderID);
@@ -607,6 +647,63 @@ function sendNotificationButton(recipientId) {
       }
     }
   };  
+
+  callSendAPI(messageData);
+}
+
+function sendSMS(senderID, phone, username) {
+    
+    var sendSmsRequest = {};
+    sendSmsRequest.from = "APIX 2017";
+    sendSmsRequest.to = phone;
+    sendSmsRequest.msg = username + ", seu pagamento foi efetuado com sucesso!";
+    sendSmsRequest.callbackOption = "FINAL";
+
+    var json = {};
+    json.sendSmsRequest = sendSmsRequest;
+
+    request({
+        uri: SMS_URL + '/sms',
+        method: 'POST',
+        headers: {'client_id': API_CLIENT_ID, 
+                  'content-type': 'application/json'},
+        json: json
+      }, function (error, response, body) {          
+          if (!error && response.statusCode == 200 && body) {
+              sendSurveyMessage(senderID);
+          } else {
+              console.log('Error sending sms');
+          }
+    });
+}
+
+function sendSurveyMessage(recipientId) {
+
+  var messageData = {
+    recipient: {
+      id: recipientId
+    },
+    message: {
+      text: "Obrigado por utilizar nossos serviços. Como você avalia sua compra?",
+      quick_replies: [
+        {
+          "content_type":"text",
+          "title":"Bom",
+          "payload":"BOM"
+        },
+        {
+          "content_type":"text",
+          "title":"Muito Bom",
+          "payload":"MUITO_BOM"
+        },
+        {
+          "content_type":"text",
+          "title":"Extraordinário",
+          "payload":"EXTRAORDINARIO"
+        }
+      ]
+    }
+  };
 
   callSendAPI(messageData);
 }
