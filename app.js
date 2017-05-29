@@ -200,7 +200,7 @@ function parsePostback(postback, senderID) {
       switch(postback) {
 
         case 'COMPRAR_SIM':
-          getPhone(senderID);
+          getUserName(senderID, getPhone);
         break;
 
         case 'INFORMAR_TEL_SIM':
@@ -562,7 +562,7 @@ function sendVisaCheckoutButtonMessage(senderID, paymentID) {
   callSendAPI(messageData);
 }
 
-function getUserName(senderID) {
+function getUserName(senderID, cb) {
 
   request({
     uri: 'https://graph.facebook.com/v2.9/' + senderID + '/',
@@ -577,6 +577,8 @@ function getUserName(senderID) {
         var userProfile = JSON.parse(body);
         flow.username = userProfile.first_name + ' ' + userProfile.last_name;
         saveFlowCache(senderID, flow);
+
+        cb(senderID, flow.username);
         
     } else {
       console.error("Failed calling Graph API", response.statusCode, response.statusMessage, body.error);
@@ -720,8 +722,7 @@ function parseMessageWit(message, senderID) {
         switch(intent.value) {
         
           case 'greetings':
-             getUserName(senderID);
-             sendTextMessage(senderID, "Olá, seja bem vindo.");
+             getUserName(senderID, sendWelcomeMessage);
              return; 
 
           case 'buy':
@@ -750,6 +751,21 @@ function parseMessageWit(message, senderID) {
 
         sendGenericErrorMessage(senderID);
     });
+}
+
+function sendWelcomeMessage(senderID, name) {
+
+    var messageData = {
+      recipient: {
+        id: senderID
+      },
+      message: {
+        text: "Olá " + name + ", seja bem vindo ao bot do APIX 2017. O que deseja comprar?",
+        metadata: "WELCOME_MESSAGE"
+      }
+    };
+
+    callSendAPI(messageData);
 }
 
 function callSendAPI(messageData) {
