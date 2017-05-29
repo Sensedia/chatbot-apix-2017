@@ -5,7 +5,8 @@ const
   config = require('config'),
   crypto = require('crypto'),
   express = require('express'),
-  https = require('https');
+  https = require('https'),
+  request = require('request');
 
 var app = express();
 
@@ -48,10 +49,98 @@ app.get('/webhook', function(req, res) {
   }  
 });
 
+app.post('/webhook', function (req, res) {
+
+  var data = req.body;
+
+  if (data.object == 'page') {
+
+      data.entry.forEach(function(pageEntry) {
+      
+          var pageID = pageEntry.id;
+          var timeOfEvent = pageEntry.time;
+
+          pageEntry.messaging.forEach(function(messagingEvent) {
+              if (messagingEvent.message) {
+                receivedMessage(messagingEvent);
+              }
+          });
+      });
+  }
+
+  res.sendStatus(200);
+});
+
 app.get('/status', function(req, res) {
     res.writeHead(200, {"Content-Type": "text/plain"});
     res.end("Status: OK");
 });
+
+function receivedMessage(event) {
+  
+  var senderID = event.sender.id;
+  var recipientID = event.recipient.id;
+  var timeOfMessage = event.timestamp;
+
+  console.log("Mensagem recebida. Usuário: %d | Pagina %d | Time %d. Mensagem: ", senderID, recipientID, timeOfMessage);
+  console.log(JSON.stringify(message));
+
+  var message = event.message;
+
+  var messageText = message.text;
+  var messageAttachments = message.attachments;
+
+  if (messageText) {
+     sendTextMessage(senderID, "Olá, seja bem vindo.");
+  } else if (messageAttachments) {
+     sendErrorMessage(senderID, "No momento não aceitamos mensagens com anexo");
+  }
+}
+
+function sendErrorMessage(senderID, message) {
+    sendTextMessage(senderID, message);
+}
+
+function sendTextMessage(recipientId, messageText) {
+  
+  var messageData = {
+    recipient: {
+      id: recipientId
+    },
+    message: {
+      text: messageText,
+      metadata: "TEXT_MESSAGE"
+    }
+  };
+
+  callSendAPI(messageData);
+}
+
+function callSendAPI(messageData) {
+    
+    request({
+      uri: 'https://graph.facebook.com/v2.9/me/messages',
+      qs: { access_token: PAGE_ACCESS_TOKEN },
+      method: 'POST',
+      json: messageData
+
+    }, function (error, response, body) {
+      
+      if (!error && response.statusCode == 200) {
+        
+        var recipientId = body.recipient_id;
+        var messageId = body.message_id;
+
+        if (messageId) {
+          console.log("Mensage %s enviada para  %s", messageId, recipientId);
+        } else {
+          console.log("Mensagem enviada para %s", recipientId);
+        }
+      } else {
+        console.error("Falha ao enviar mensagem", response.statusCode, response.statusMessage, body.error);
+      }
+    });  
+}
 
 function verifyRequestSignature(req, res, buf) {
   
