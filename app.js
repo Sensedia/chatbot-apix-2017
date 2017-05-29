@@ -8,7 +8,8 @@ const
   https = require('https'),
   request = require('request'),
   dateFormat = require('dateformat'),
-  NodeCache = require( "node-cache" );
+  phone = require('node-phonenumber'),
+  NodeCache = require('node-cache');
 
 var app = express();
 
@@ -39,6 +40,10 @@ const WIT_TOKEN = (process.env.WIT_TOKEN) ?
 const PRODUCT_URL = (process.env.PRODUCT_URL) ?
   (process.env.PRODUCT_URL) :
   config.get('productUrl');
+
+const PHONE_URL = (process.env.PHONE_URL) ?
+  (process.env.PHONE_URL) :
+  config.get('phoneUrl');
 
 const API_CLIENT_ID = (process.env.API_CLIENT_ID) ?
   (process.env.API_CLIENT_ID) :
@@ -151,7 +156,15 @@ function parsePostback(postback, senderID) {
       switch(postback) {
 
         case 'COMPRAR_SIM':
-          
+          getPhone(senderID);
+        break;
+
+        case 'INFORMAR_TEL_SIM':
+          // Encaminha para pagamento
+        break;
+
+        case 'INFORMAR_TEL_NAO':
+          sendPhoneMessage(senderID, "Informe o telefone para cadastro.");
         break;
 
         case 'NOTIFICAR_SIM':
@@ -249,8 +262,99 @@ app.post('/notification', function (req, res) {
 
            res.sendStatus(200);
     });
-
 });
+
+function sendPhoneMessage(senderID) {
+  sendTextMessage(senderID, "Informe o telefone");
+}
+
+function getPhone(senderID) {
+  
+    request({
+      uri: PHONE_URL + '/usuarios/' + senderID + '/telefones',
+      headers: {'client_id': API_CLIENT_ID},
+      method: 'GET'
+    }, function (error, response, body) {
+
+          if (!error && response.statusCode == 200 && body) {
+            
+            var bodyParsed;
+
+            if(body) {
+                bodyParsed = JSON.parse(body);
+            }
+
+            if(body && bodyParsed && bodyParsed.length > 0) {
+              
+              var flow = loadFlowCache(senderID);
+              flow.phone = bodyParsed[0].numero;
+              
+              saveFlowCache(senderID, flow);
+
+              sendPhoneButtonMessage(senderID, bodyParsed[0]);
+
+            } else {
+
+              sendPhoneMessage(senderID, "Informe o telefone para cadastro.");
+            }
+          }
+    });
+}
+
+function sendPhoneButtonMessage(senderID, phoneNumber) {
+
+  var messageData = {
+    recipient: {
+      id: senderID
+    },
+    message: {
+      attachment: {
+        type: "template",
+        payload: {
+          template_type: "button",
+          text: "Você possui o telefone " + phoneNumber.numero + " cadastrado. Deseja utilizar o mesmo?",
+          buttons:[{
+            type: "postback",
+            title: "Sim",
+            payload: "INFORMAR_TEL_SIM"
+          }, {
+            type: "postback",
+            title: "Não",
+            payload: "INFORMAR_TEL_NAO"
+          }]
+        }
+      }
+    }
+  };  
+
+  callSendAPI(messageData);
+}
+
+function savePhone(senderID, phoneNumber) {
+
+    var payload = {};
+    payload.numero = phoneNumber; 
+
+    request({
+      uri: PHONE_URL + '/usuarios/' + senderID + '/telefones',
+      method: 'POST',
+      headers: {'client_id': API_CLIENT_ID},
+      json: payload
+    }, function (error, response, body) {          
+          if (!error && response.statusCode == 201 && body) {
+
+              var flow = loadFlowCache(senderID);
+              flow.phone = phoneNumber;
+
+              saveFlowCache(senderID, flow);
+
+              console.log(">> PHONE SAVE");
+              
+          } else {
+              console.error(body);
+          }
+    });
+}
 
 function sendErrorMessage(senderID, message) {
     sendTextMessage(senderID, message);
@@ -313,9 +417,6 @@ function callWit(message, senderID) {
       json: message
     }, function (error, response, body) {
         
-          console.log(">>> WIT");
-          console.log(body);
-
           if (!error && response.statusCode == 200 && body 
               && body.entities && body.entities.intent && body.entities.intent.length > 0) {
 
@@ -344,6 +445,21 @@ function parseMessageWit(message, senderID) {
              }
 
              return;
+          
+          case 'phone':
+
+             if(message.phone_number && message.phone_number.length > 0) {
+  
+                var phoneUtil = phone.PhoneNumberUtil.getInstance();
+                var phoneNumber = phoneUtil.parse(message.phone_number[0].value,'BR');
+                var toNumber = phoneUtil.format(phoneNumber, phone.PhoneNumberFormat.E164);
+ 
+                console.log(toNumber);
+
+                savePhone(senderID, toNumber);
+             }
+
+            return;
         }
 
         sendGenericErrorMessage(senderID);
