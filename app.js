@@ -584,22 +584,6 @@ function getUserName(senderID) {
   });  
 }
 
-app.post('/finish', function (req, res) {
-
-    if(req.query.senderID) {
-      //sendSurveyMessage(payload.senderID);
-      //callGraphAPI(payload.senderID);
-      getUserName(req.query.senderID);
-      searchProduct('Iphone 6', req.query.senderID);
-      generateReceiptCielo(req.query.senderID);
-      //getPhone(payload.senderID);
-     // var flow = loadFlowCache(payload.senderID);
-      //sendSMS(payload.senderID, flow.phone);
-    }
-
-    res.sendStatus(200);
-});
-
 function sendErrorMessage(senderID, message) {
     sendTextMessage(senderID, message);
 }
