@@ -6,7 +6,8 @@ const
   crypto = require('crypto'),
   express = require('express'),
   https = require('https'),
-  request = require('request');
+  request = require('request'),
+  dateFormat = require('dateformat');
 
 var app = express();
 
@@ -30,7 +31,11 @@ const SERVER_URL = (process.env.SERVER_URL) ?
   (process.env.SERVER_URL) :
   config.get('serverURL');
 
-if (!(APP_SECRET && VALIDATION_TOKEN && PAGE_ACCESS_TOKEN && SERVER_URL)) {
+const WIT_TOKEN = (process.env.WIT_TOKEN) ?
+  (process.env.WIT_TOKEN) :
+  config.get('witAccessToken');
+
+if (!(APP_SECRET && VALIDATION_TOKEN && PAGE_ACCESS_TOKEN && SERVER_URL && WIT_TOKEN)) {
   console.error("Configurações não informadas");
   process.exit(1);
 }
@@ -91,7 +96,7 @@ function receivedMessage(event) {
   var messageAttachments = message.attachments;
 
   if (messageText) {
-     sendTextMessage(senderID, "Olá, seja bem vindo.");
+     callWit(messageText, senderID);
   } else if (messageAttachments) {
      sendErrorMessage(senderID, "No momento não aceitamos mensagens com anexo");
   }
@@ -99,6 +104,10 @@ function receivedMessage(event) {
 
 function sendErrorMessage(senderID, message) {
     sendTextMessage(senderID, message);
+}
+
+function sendGenericErrorMessage(senderID) {
+    sendTextMessage(senderID, "Não conseguimos entender.");
 }
 
 function sendTextMessage(recipientId, messageText) {
@@ -114,6 +123,50 @@ function sendTextMessage(recipientId, messageText) {
   };
 
   callSendAPI(messageData);
+}
+
+function callWit(message, senderID) {
+
+  request({
+      uri: 'https://api.wit.ai/message',
+      headers: { 'Authorization': 'Bearer ' + WIT_TOKEN },
+      qs: { q: message, v: dateFormat(new Date(), "dd/m/yyyy")},
+      method: 'GET',
+      json: message
+    }, function (error, response, body) {
+        
+          console.log(">>> WIT");
+          console.log(body);
+
+          if (!error && response.statusCode == 200 && body 
+              && body.entities && body.entities.intent && body.entities.intent.length > 0) {
+
+             parseMessageWit(body.entities, senderID);
+          } else {
+             sendGenericErrorMessage(senderID);
+             return;
+          }
+    }); 
+}
+
+function parseMessageWit(message, senderID) {
+
+    message.intent.forEach(function(intent) {
+
+        console.log(">>>> Intent");
+        console.log(intent);
+        console.log(">>>> Value");
+        console.log(intent.value);
+      
+        switch(intent.value) {
+        
+          case 'greetings':
+             sendTextMessage(senderID, "Olá, seja bem vindo.");
+             return; 
+        }
+
+        sendGenericErrorMessage(senderID);
+    });
 }
 
 function callSendAPI(messageData) {
