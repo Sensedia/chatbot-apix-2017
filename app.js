@@ -7,7 +7,8 @@ const
   express = require('express'),
   https = require('https'),
   request = require('request'),
-  dateFormat = require('dateformat');
+  dateFormat = require('dateformat'),
+  NodeCache = require( "node-cache" );
 
 var app = express();
 
@@ -34,6 +35,16 @@ const SERVER_URL = (process.env.SERVER_URL) ?
 const WIT_TOKEN = (process.env.WIT_TOKEN) ?
   (process.env.WIT_TOKEN) :
   config.get('witAccessToken');
+
+const PRODUCT_URL = (process.env.PRODUCT_URL) ?
+  (process.env.PRODUCT_URL) :
+  config.get('productUrl');
+
+const API_CLIENT_ID = (process.env.API_CLIENT_ID) ?
+  (process.env.API_CLIENT_ID) :
+  config.get('apiClientID');
+
+const CACHE = new NodeCache();
 
 if (!(APP_SECRET && VALIDATION_TOKEN && PAGE_ACCESS_TOKEN && SERVER_URL && WIT_TOKEN)) {
   console.error("Configurações não informadas");
@@ -68,7 +79,9 @@ app.post('/webhook', function (req, res) {
           pageEntry.messaging.forEach(function(messagingEvent) {
               if (messagingEvent.message) {
                 receivedMessage(messagingEvent);
-              }
+              } else if (messagingEvent.postback) {
+                receivedPostback(messagingEvent);
+              } 
           });
       });
   }
@@ -81,26 +94,163 @@ app.get('/status', function(req, res) {
     res.end("Status: OK");
 });
 
+app.get("/image/:productId", function(req, res) {
+
+    request({
+      uri: PRODUCT_URL + '/products/' + req.params.productId + '/images',
+      headers: {'client_id': API_CLIENT_ID},
+      method: 'GET'
+    }, function (error, response, body) {
+          
+          var img = new Buffer(JSON.parse(body).data, 'base64');
+
+          res.writeHead(200, {
+            'Content-Type': 'image/png',
+            'Content-Length': img.length
+          });
+
+          res.end(img);
+    });
+});
+
 function receivedMessage(event) {
   
-  var senderID = event.sender.id;
-  var recipientID = event.recipient.id;
-  var timeOfMessage = event.timestamp;
+    var senderID = event.sender.id;
+    var recipientID = event.recipient.id;
+    var timeOfMessage = event.timestamp;
 
-  console.log("Mensagem recebida. Usuário: %d | Pagina %d | Time %d. Mensagem: ", senderID, recipientID, timeOfMessage);
-  console.log(JSON.stringify(message));
+    console.log("Mensagem recebida. Usuário: %d | Pagina %d | Time %d. Mensagem: ", senderID, recipientID, timeOfMessage);
+    console.log(JSON.stringify(message));
 
-  var message = event.message;
+    var message = event.message;
 
-  var messageText = message.text;
-  var messageAttachments = message.attachments;
+    var messageText = message.text;
+    var messageAttachments = message.attachments;
 
-  if (messageText) {
-     callWit(messageText, senderID);
-  } else if (messageAttachments) {
-     sendErrorMessage(senderID, "No momento não aceitamos mensagens com anexo");
-  }
+    if (messageText) {
+      callWit(messageText, senderID);
+    } else if (messageAttachments) {
+      sendErrorMessage(senderID, "No momento não aceitamos mensagens com anexo");
+    }
 }
+
+function receivedPostback(event) {
+    
+    var senderID = event.sender.id;
+    var recipientID = event.recipient.id;
+    var timeOfPostback = event.timestamp;
+    var payload = event.postback.payload;
+
+    console.log("Postback. Usuário %d | Página %d | Payload '%s' | Time %d", senderID, recipientID, payload, timeOfPostback);
+
+    parsePostback(event.postback.payload, senderID);
+}
+
+function parsePostback(postback, senderID) {
+
+      switch(postback) {
+
+        case 'COMPRAR_SIM':
+          
+        break;
+
+        case 'NOTIFICAR_SIM':
+          sendProductNotification(senderID);
+          sendTextMessage(senderID, "Ok, avisaremos quando encontrar");
+        break;
+
+        case 'NOTIFICAR_NAO':
+          sendTextMessage(senderID, "Tudo bem, volte sempre!");
+        break;
+
+        default:
+          sendGenericErrorMessage(senderID);
+      }
+}
+
+function searchProduct(product, senderID) {
+
+    request({
+      uri: PRODUCT_URL + '/products/',
+      headers: { 'client_id': API_CLIENT_ID },
+      qs: { name: product},
+      method: 'GET'
+    }, function (error, response, body) {      
+
+          if (!error && response.statusCode == 200 && JSON.parse(body).length > 0) {
+              sendTextMessage(senderID, product + ' encontrado!');
+              sendProductMessage(senderID, JSON.parse(body)[0]);
+           } else {
+              sendErrorMessage(senderID, "Produto não encontrado no momento.");
+              sendNotificationButton(senderID);
+           }
+    });
+}
+
+function sendProductMessage(recipientId, product) {
+
+  var messageData = {
+    recipient: {
+      id: recipientId
+    },
+    message: {
+      attachment: {
+        type: "template",
+        payload: {
+          template_type: "generic",
+          elements: [{
+            title: product.name,
+            subtitle: product.installment,
+            image_url: SERVER_URL + "/image/" + product.productId,
+            buttons: [{
+              type: "postback",
+              title: "Comprar",
+              payload: "COMPRAR_SIM",
+            }],
+          }]
+        }
+      }
+    }
+  };
+
+  callSendAPI(messageData);
+}
+
+function sendProductNotification(senderID) {
+
+    var flow = loadFlowCache(senderID);
+
+    request({
+      uri: PRODUCT_URL + '/notifications',
+      headers: {'content-type': 'application/json',
+                'client_id': API_CLIENT_ID},
+      method: 'POST',
+      json: true,
+      body: {"product": flow.productName, "senderId": senderID, "callback": SERVER_URL + "/notification"}
+    }, function (error, response, body) {
+        console.log('Notificação registrada');
+    });
+}
+
+app.post('/notification', function (req, res) {
+
+    request({
+      uri: PRODUCT_URL + '/products/' + req.body.product,
+      headers: {'client_id': API_CLIENT_ID},
+      method: 'GET'
+    }, function (error, response, body) {      
+
+          if (!error && response.statusCode == 200 && body ) {
+              sendTextMessage(req.body.senderId, 'Encontramos seu produto!');
+              sendGenericMessage(req.body.senderId, JSON.parse(body));
+
+              console.log('Notificação recebida');
+           }
+
+           res.sendStatus(200);
+    });
+
+});
 
 function sendErrorMessage(senderID, message) {
     sendTextMessage(senderID, message);
@@ -121,6 +271,34 @@ function sendTextMessage(recipientId, messageText) {
       metadata: "TEXT_MESSAGE"
     }
   };
+
+  callSendAPI(messageData);
+}
+
+function sendNotificationButton(recipientId) {
+  var messageData = {
+    recipient: {
+      id: recipientId
+    },
+    message: {
+      attachment: {
+        type: "template",
+        payload: {
+          template_type: "button",
+          text: "Quer que continuemos procurando e avisamos quando encontrar?",
+          buttons:[{
+            type: "postback",
+            title: "Sim",
+            payload: "NOTIFICAR_SIM"
+          }, {
+            type: "postback",
+            title: "Não",
+            payload: "NOTIFICAR_NAO"
+          }]
+        }
+      }
+    }
+  };  
 
   callSendAPI(messageData);
 }
@@ -158,6 +336,14 @@ function parseMessageWit(message, senderID) {
           case 'greetings':
              sendTextMessage(senderID, "Olá, seja bem vindo.");
              return; 
+
+          case 'buy':
+
+             if(message.product && message.product.length > 0) {
+                searchProduct(message.product[0].value, senderID);
+             }
+
+             return;
         }
 
         sendGenericErrorMessage(senderID);
@@ -209,6 +395,21 @@ function verifyRequestSignature(req, res, buf) {
       throw new Error("Não foi possível validar a assinatura da requisição");
     }
   }
+}
+
+function loadFlowCache(senderID) {
+
+  var flow = CACHE.get(senderID);
+
+  if ( !flow ){
+    flow = {};
+  }
+
+  return flow;  
+}
+
+function saveFlowCache(senderID, flow) {
+    CACHE.set(senderID, flow);
 }
 
 app.listen(app.get('port'), function() {
