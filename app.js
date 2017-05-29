@@ -148,6 +148,7 @@ function receivedMessage(event) {
     console.log(JSON.stringify(message));
 
     var message = event.message;
+    var messageId = message.mid;
 
     var messageText = message.text;
     var messageAttachments = message.attachments;
