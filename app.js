@@ -462,7 +462,7 @@ function generateReceipt(senderID, method) {
     json.paymentProvider = method;
     json.amount = 3;
     json.remoteID = senderID;
-    json.callbackUrl = SERVER_URL + '/finish?senderId=' + senderID;
+    json.callBackUrl = SERVER_URL + '/finish?senderId=' + senderID;
     json.item = flow.productName;
 
     request({
