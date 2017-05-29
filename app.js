@@ -49,6 +49,10 @@ const PAYMENT_URL = (process.env.PAYMENT_URL) ?
   (process.env.PAYMENT_URL) :
   config.get('paymentUrl');
 
+const VISA_CHECKOUT_URL = (process.env.VISA_CHECKOUT_URL) ?
+  (process.env.VISA_CHECKOUT_URL) :
+  config.get('visaCheckoutUrl');
+
 const SMS_URL = (process.env.SMS_URL) ?
   (process.env.SMS_URL) :
   config.get('smsUrl');
@@ -109,7 +113,7 @@ app.get('/status', function(req, res) {
 
 app.get("/image/:productId", function(req, res) {
 
-    request({
+    request({ 
       uri: PRODUCT_URL + '/products/' + req.params.productId + '/images',
       headers: {'client_id': API_CLIENT_ID},
       method: 'GET'
@@ -462,7 +466,7 @@ function generateReceipt(senderID, method) {
     json.paymentProvider = method;
     json.amount = 3;
     json.remoteID = senderID;
-    json.callBackUrl = SERVER_URL + '/finish?senderId=' + senderID;
+    json.callBackUrl = SERVER_URL + '/finish?senderID=' + senderID;
     json.item = flow.productName;
 
     request({
