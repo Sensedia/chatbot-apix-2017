@@ -1,13 +1,13 @@
 {
     "appSecret": "ALTERAR",
     "pageAccessToken": "ALTERAR",
-    "validationToken": "ALTERAR",
+    "validationToken": "apix",
     "serverURL": "ALTERAR",
-    "witAccessToken": "ALTERAR",
-    "productUrl": "ALTERAR",
-    "phoneUrl": "ALTERAR",
-    "paymentUrl": "ALTERAR",
-    "apiClientID": "ALTERAR",
-    "smsUrl": "ALTERAR",
-    "visaCheckoutUrl": "ALTERAR"
+    "witAccessToken": "CYDII7F5PHP7QZJRU3T2WAHY6OVO5CRZ",
+    "productUrl": "http://apix.sensedia.com/api/v1/sku",
+    "phoneUrl": "http://apix.sensedia.com/api/v1",
+    "paymentUrl": "http://apix.sensedia.com/api/v1",
+    "apiClientID": "1fb156aa-de4b-317e-97bf-77319367b43b",
+    "smsUrl": "http://apix.sensedia.com/zenvia/v1",
+    "visaCheckoutUrl": "http://apix.sensedia.com/paymentvisa"
 }
