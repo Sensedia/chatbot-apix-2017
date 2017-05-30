@@ -82,10 +82,10 @@ function receivedMessage(event) {
   var recipientID = event.recipient.id;
   var timeOfMessage = event.timestamp;
 
+  var message = event.message;
+
   console.log("Mensagem recebida. Usuário: %d | Pagina %d | Time %d. Mensagem: ", senderID, recipientID, timeOfMessage);
   console.log(JSON.stringify(message));
-
-  var message = event.message;
 
   var messageText = message.text;
   var messageAttachments = message.attachments;
