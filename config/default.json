@@ -1,0 +1,12 @@
+{
+    "appSecret": "ALTERAR",
+    "pageAccessToken": "ALTERAR",
+    "validationToken": "ALTERAR",
+    "serverURL": "ALTERAR",
+    "witAccessToken": "ALTERAR",
+    "productUrl": "ALTERAR",
+    "phoneUrl": "ALTERAR",
+    "paymentUrl": "ALTERAR",
+    "visaCheckoutUrl": "ALTERAR",
+    "apiClientID": "ALTERAR"
+}
