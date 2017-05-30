@@ -1,0 +1,13 @@
+{
+    "appSecret": "4301c78314ba64a2dc5a3f0b3f298326",
+    "pageAccessToken": "EAAEhVJMUwiUBAJ5kJSPziqSFSwZB6pc61J2uDf6QHWJYFokT5ZA7ZA059zn4d5VF7zFobzi0KPcgkbGot5ZA7NoR8IuYZCKykAe5il695trKGpln3IMtN0DsPKi8TDCyu0uil0Vyazm32uP4UOrAdgYM3gpLhsI0Qw9i7QKcdUQZDZD",
+    "validationToken": "apix",
+    "serverURL": "https://chatbot-apix-andre.azurewebsites.net",
+    "witAccessToken": "RBKFZD6WUTFKKRPSWZHLX7CYVSESDJVT",
+    "productUrl": "http://apix.sensedia.com/api/v1/sku",
+    "phoneUrl": "http://apix.sensedia.com/api/v1",
+    "paymentUrl": "http://apix.sensedia.com/api/v1",
+    "apiClientID": "1fb156aa-de4b-317e-97bf-77319367b43b",
+    "smsUrl": "http://apix.sensedia.com/zenvia/v1",
+    "visaCheckoutUrl": "http://apix.sensedia.com/paymentvisa"
+}
