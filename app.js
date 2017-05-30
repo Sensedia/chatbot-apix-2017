@@ -125,7 +125,6 @@ function receivedMessage(event) {
     var timeOfMessage = event.timestamp;
 
     console.log("Mensagem recebida. Usuário: %d | Pagina %d | Time %d. Mensagem: ", senderID, recipientID, timeOfMessage);
-    console.log(JSON.stringify(message));
 
     var message = event.message;
 
